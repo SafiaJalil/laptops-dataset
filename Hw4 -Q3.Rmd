@@ -1,0 +1,277 @@
+---
+title: "Hw 4 Q3"
+author: "Safia 11012371"
+date: "2022-12-09"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+
+
+```{r}
+library(rpart)
+library(rpart.plot)
+library(party)
+library(partykit)
+library(caret)
+```
+
+```{r}
+library(readr)
+lt <- read_csv("laptops.csv")
+#to check the dimension of the dataset 
+dim(lt)
+#type of variables 
+str(lt)
+summary(lt)
+
+#We are not very concern with the missing values,data errors here because classification trees handels the missing values and run the model accurately.
+
+#See distribution of data, statistics in numerical variables 
+library(skimr)
+skim(lt)
+
+#To see the data in all numerical and categorical variables 
+library(Hmisc)
+describe(lt)
+
+
+```
+
+```{r}
+#Drop sales varaiable from the data set and then predict
+lt1 <- lt[ , -c(3)]
+
+
+#Partition data set 60% training and 40% validation
+set.seed(1)
+train.index <- sample(c(1:dim(lt1)[1]), dim(lt1)[1]*0.6)
+train.df <- lt1[train.index, ]
+valid.df <- lt1[-train.index, ]
+```
+
+## Q3 part a 
+```{r}
+#Plotting a classification tree taking sales bin as a target variable 
+default.ct<- rpart(Salesbin ~ ., data = train.df,
+control = rpart.control(maxdepth = 2), method = "class")
+## plot tree
+rpart.plot(default.ct)
+
+#From the classification tree we can interpret that the most important variables with keeping depth equals to 2 we get shelveloc categorey good and price as the most important predictors to predict sales of laptop.
+
+#Interpreting the tree
+#The first green rectangle on the top is our root node i.e the most important predictor of our target variable. The root node shows Shelve_Loc variable, category Good as a most important indicator(because it is a categorical variable so the rules are based on the categories as it is showing the category), the 100% in the rectangle of the root node shows that it has 100% of trainning data observations in it.And the "low" shows the predicted class of our target variable sales bin and 0.81 is the probability of the salesbin.
+#Reading the second brach of the root node it says that if shelevloc is good go to the left side "yes", if not then go to the right side "no".
+#At the second level the branches are following price rule , keeping "price' is an important predictor of sales bin. the tree shows that if price < 109 withholds 20% of total observation and the probability of high sales bin is 0.48 whereas looking at the right of the root node, the leaf with low salesbin, hold total 80% of data and left leaf hold 20% of observation of high sales class with the probabilty of 0.48. We here donot know the optimal splits so by changing the maxdepth in the function above we can get different results. But the right approach is to check the cp and lower the cp you will get large tree with moe branches.
+
+
+#Plotting a classification tree taking sales bin as a target variable by changing the maxdepth to 5 to just see changes in the results. 
+default.ct<- rpart(Salesbin ~ ., data = train.df,
+control = rpart.control(maxdepth = 5), method = "class")
+## plot tree
+rpart.plot(default.ct)
+
+#By looking at the terminal nodes we see that each nodes holds less percentages of observations i.e the minimum is 3% which means that it has only 2 or 3 observations in the leaf and we can't make decision based on 2 or 3 observations so we can see that here we have homogeneous results now and also now we can see the increase no of predictors as well which were not visible in the max dept plot made above.
+#Also another way to check is when we sum all the percentage of observations in the terminal nodes it will give us 100%.
+```
+
+## Q3 part b
+```{r}
+#To see the final pruned tree we will now plot more classification tree
+deeper.ct <- rpart(Salesbin ~ ., data = train.df, method = "class", cp = 0, minsplit = 1)
+# count number of leaves
+length(deeper.ct$frame$var[deeper.ct$frame$var == "<leaf>"])
+#From the above results we see that the max no of branches will be 28 for this classification tree.
+
+# plot tree for max value of the leaves to see which of all the variables in the dataset are the good predicators of sales
+prp(deeper.ct, type = 1, extra = 1, under = TRUE, split.font = 1, varlen = -10,
+box.col=ifelse(deeper.ct$frame$var == "<leaf>", 'gray', 'white'))
+
+#To find the optimal no of classification tree splits we consider CP value because this captures the no of splits or you can say that CP is the proxy of splits.
+
+#The tree looks really messy but showing homogenized groups but the biggest challenge is the interpretation, also the large spread classification trees wih many branches shows that the model has small CP value and smaller the CP value then there are chances of over fitting of the data because you start baking your tree into smaller and smaller branches and then we will reach to a situation where each branch will only hold 2 or 3 data points which is not good to make decisions based on them.So having very small CP value and large branched tree there are chances of higher over fitting. Also our goal is to find predictors that have strong impact on our target varaible and that gives higher accuracy for the predictive performace of the model.
+
+#From the above we get the important predictors that impact the sales which are good to build model with:
+#ShelveLoc + Price + Education + CompPrice + Advertising + Population + ID + US + Income.
+
+#We will print the model to have more details for pruning our tree and do better interpretation
+cv.ct <- rpart(Salesbin~ ., data = train.df, method = "class",
+cp = 0.00001, minsplit = 5, xval = 5)
+# Print thr table .
+printcp(cv.ct)
+
+
+##Explaination of the table
+#The output shows following information:
+#The root node error is the number of data points in the training data that shows high sales bin. If we go up and see the root node of our tree we the probability of the low salesbin is 0.81, so even manually calculating we get this result 1-0.81=0.19.
+#The n shows the no of observations we considered in the trainning data that is 240(training data) out of 400.
+
+#then we look at the samll table in the output that tells us about the CP value with the no of splits, errors and standard deviation.
+#Here we are doing recursive partioning so we need to consider the no of splits, we need to see the cp value so if we take lower cp value then there are chances of overfitting. Even when we compare the solits with cp value, initally for the split value 0 the cp value is the highest 0.163 and when there is no split you don't take error in consideration but moving down the no of splits increases and cp value decreases.
+
+#The best way is to plot it and visually see to get the optimal no of splits for pruned tree
+plotcp(cv.ct)
+#Looking at the graph we see that the cp value on the x axis and absolute errors on the right and no of splits on the top explains that as the no of splits increases the cp value is decreasing.But to choose the optimal no of splits we have to choose the lowest absolute error and we see that from the graph we are getting similar value of error at 2 and 3 split but then comparing cp value we see the no of splits are really small and if we choose 2 there are chances of losing information or under fitting so we will choose 3 no of splits for pruning our chart.Another important thing is we chose low absoulte error and cp value to choose
+
+
+
+# prune by lower cp
+pruned.ct <- prune(cv.ct,
+cp = cv.ct$cptable[which.min(cv.ct$cptable[,"xerror"]),"CP"])
+length(pruned.ct$frame$var[pruned.ct$frame$var == "<leaf>"])
+
+#we select the cp value for pruning the tree which has lowest cross validation error represented as ‘xerrror’ which is 0.71739 and CP value 0.054348  Thus we selected the 3th row having lowest error.
+
+#Plotting again to check the best predictors at split 3 
+prp(pruned.ct, type = 1, extra = 1, split.font = 1, varlen = -10)
+
+#After pruning now we get these varaiables that have impact on the dependent varaiable 
+print(pruned.ct)
+#The best to two predictors to predict sales bin is ShelveLoc and Price. 
+
+# Confusion matrix -train
+p <- predict(pruned.ct, train.df, type = 'class')
+confusionMatrix(as.factor(p), as.factor(train.df$Salesbin))
+
+#From the output of the confusion matrix, we can see that the overall model accuracy on the trainning data is 87% and comparing with the no onformation rate which is 80.83% means with no model you will get this accuracy rate to classify the sales bin, if we classify all salesbin as high we will be 80% right because that high sales bin are actually high salesbin, so our model accuracy and no model accuracy is approximately same so we can not say that our model is doing really good.
+
+#Looking at the sensitivity rate of our model explains that at what rate it is correctly identifying high sales bins and the rate is 34.783% which is very low but if our class of interest is "low" then looking at specificity rate 99% the model is correctly identifying the low sales bin.
+
+```
+
+## Q3 part c
+#Tried so many ways but couldn't do it.
+
+```{r}
+
+#Not working 
+
+# library(tree)
+# rpart.plot(pruned.ct, main = "Sales\n(binary response)")
+# 
+# rpart.plot(pruned.ct, type = 3, clip.right.labs = FALSE,
+#            branch = .4,
+#            box.palette = "Grays",
+#            main = "type = 3, clip.right.labs = FALSE, ...\n")
+# 
+# plot(train.df$Advertising, train.df$Price, main = "Advertising vs Price", xlab = "Advertising", ylab ="Price", pch = 19, col = as.factor(train.df$Salesbin) , frame = FALSE)
+# lines(lowess(train.df$Advertising, train$Price), col = "blue")
+
+library(ggplot2)
+plot(train.df$Advertising, train.df$Price, main = "Advertising vs Price", xlab = "Advertising", ylab ="Price", pch = 19, col = as.factor(train.df$Salesbin) , frame = FALSE)
+lines(lowess(train.df$Advertising, train.df$Price), col = "purple")
+```
+
+
+## Q3 part d
+```{r}
+# Comparing tree using training and validation data set 
+#Creating tree for validation data set now.
+
+# Default tree comparison between training and validation data
+default.ct.point.pred.train <- predict(default.ct,train.df,type = "class")
+default.ct.point.pred.valid <- predict(default.ct,valid.df,type = "class")
+
+# Deeper tree comparison between training and validation data
+deeper.ct.point.pred.train <- predict(deeper.ct,train.df,type = "class")
+deeper.ct.point.pred.valid <- predict(deeper.ct,valid.df,type = "class")
+
+# Pruned tree comparison between training and validation data
+pruned.ct.point.pred.train <- predict(pruned.ct,train.df,type = "class")
+pruned.ct.point.pred.valid <- predict(pruned.ct,valid.df,type = "class")
+
+```
+
+
+```{r}
+library(caret)
+# Lift chart 
+```
+
+```{r}
+# default tree: validation
+confusionMatrix(default.ct.point.pred.train, factor(train.df$Salesbin))
+```
+```{r}
+# default tree: validation
+confusionMatrix(default.ct.point.pred.valid, factor(valid.df$Salesbin))
+```
+#By comparing the confusion matrix of training and validation dataset, of the deafault classification tree, without doing much, comparing the accuracy we see that on training data the model gives an overall accuracy of 87% and on validation dataset it gives an accuracy of 83%, so we can say that the overall accuracy of the model has been good and the model predicts well.Now by comparing the class "high" prediction comparing the senstivity rate we see a large drop, the model on traiining data predicts 50% class "high" correctly whereas in validation dataset it drop and can only predits 27% class high correctly.But if our interset of class in low that model predicts class"low" approximately above 95% corectly on both dataset. Hence we can say that the overall model accracy and the class predict "low" is some where same so this model has good predictive power.
+```{r}
+# deeper tree: training
+confusionMatrix(deeper.ct.point.pred.train, factor(train.df$Salesbin))
+```
+
+```{r}
+# deeper tree: validation
+confusionMatrix(deeper.ct.point.pred.valid, factor(valid.df$Salesbin))
+```
+#By comparing the confusion matrix of training and validation dataset, of the deeper classification tree, i.e with full branches, considering max no of predictors, comparing the accuracy we see that on training data the model gives an overall accuracy of 100% because of overfitting and on validation dataset it gives an accuracy of 77%. The trainning data will give 100% accuracy because of overfitting of the model but for us the important thing to see is to check the accuracy on the validation data set to check how good our model is to predict and by comparision overall accuracy of the model decreases because of overfitting but it's not really bad but we will not choose it as it is overfit.Now by comparing the class "high" prediction comparing the senstivity rate we see a large drop, the model on traiining data predicts 100% class "high" correctly whereas in validation dataset it drop and can only predits 54% class "high" correctly.But if our interset of class is "low" then model predicts 100% correctly on trainning dataset but drops to 83% in the validation dataset. 
+#This model is overfit so we will not consider it.
+```{r}
+#pruned tree . training 
+confusionMatrix(pruned.ct.point.pred.train, factor(train.df$Salesbin))
+```
+
+```{r}
+#pruned tree : validation
+confusionMatrix(pruned.ct.point.pred.valid, factor(valid.df$Salesbin))
+```
+#By comparing the confusion matrix of training and validation dataset, of the pruned classification tree, choosing the optimal number of splits, comparing the accuracy we see that on training data the model gives an overall accuracy of 87% and on validation dataset it gives an accuracy of 84%, so we can say that the overall accuracy of the model has been good and the model predicts well.Now by comparing the class "high" prediction comparing the senstivity rate we see a large drop, the model on traiining data predicts 34% class "high" correctly whereas in validation dataset it drop and can only predits 27% class high correctly.But if our interset of class in low that model predicts class"low" approximately above 99% corectly on both dataset. Hence we can say that the overall model accracy and the class predict "low" is some where same so this model has good predictive power. 
+
+#Comparing all results we see that the overall accuracy of the pruned and defalut tree is the same and so is the sesnsitivity and specificty rate, but pruned tree a little better results than default tree so we can say that our model is a good fit and have good predictive performance.
+
+
+
+## Q3 part e 
+```{r}
+#We have used classification tree, i.e to classify the classes whether the sales made were high or low but for regression tree we should have our target variable as a numerical variable. In classification we predict the different classes of a categorical target variables. My business question in the classification tree is that what are the predictors that classify high and low sales bin from each other.
+#But in regression trees we predict numbers i.e our target variable is numerical.In this case our business question is to predict the sales.
+#Also we change the method, for classification we use class whereas for regression we use anova method.
+#In classification we use confusion matrix to check the accuracy of our model whereas in regression we will see the RMSE and adjusted R2 to check the model predictive performance.
+
+```
+
+##Bonus question 
+```{r}
+#Regression Tree 
+#Sales is our target variable
+#Drop salesbin from the dataset and then predict
+lt2 <- lt[ , -c(2)]
+
+#Partition dataset 60% training and 40% validation
+set.seed(1)
+train.index <- sample(c(1:dim(lt2)[1]), dim(lt2)[1]*0.6)
+train.df2 <- lt2[train.index, ]
+valid.df2 <- lt2[-train.index, ]
+
+#Plotting a regression tree taking sales bin as a target varaiable 
+default.ct2<- rpart(Sales ~ ., data = train.df2,
+control = rpart.control(maxdepth = 5), method = "anova")
+## plot tree
+rpart.plot(default.ct2)
+printcp(default.ct2)
+
+#From the results we see that the important predictors are 
+#Advertising+Age+CompPrice+Price+ShelveLoc to predict Sales 
+
+plotcp(default.ct2)
+
+#From the plot the optimal no of split with lowesr error and cp value is 9 to build a pruned tree.
+
+#pruned tree 
+default.ct3<- rpart(Sales ~ ., data = train.df2,
+control = rpart.control(maxdepth = 9), method = "anova")
+
+## plot tree
+rpart.plot(default.ct3)
+
+
+```
+
